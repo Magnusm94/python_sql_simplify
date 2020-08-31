@@ -2,23 +2,35 @@ import pandas as pd
 import psycopg2
 
 config = {
-    'database': '',  # Insert name of database
-    'user': '',  # Insert db username
-    'password': '',  # Insert db password
-    'host': '',  # Insert db host (ip)
-    'port': ''  # Insert port for db (default 5432 for postgresql)
+    'database': '',  # Insert name of database.
+    'user': '',  # Insert db username.
+    'password': '',  # Insert db password.
+    'host': '',  # Insert db host (ip).
+    'port': ''  # Insert port for db (default 5432 for postgresql).
 }
 
 
-class Postgres:
+class Postgresql:
 
     def __init__(self, database=None, user=None, password=None, host=None, port=None):
+        """
+        Creates class variables.
+        :param database: Name of database.
+        :param user: Username for database.
+        :param password: Password for database.
+        :param host: Hostname (domain or ip).
+        :param port: Connection port.
+        """
         self.essentials = locals()
         self.essentials.pop('self')
         self.conn = None
         self.cursor = None
 
-    def connect(self):
+    def __connect(self):
+        """
+        Creates a connection to the database, but does not close it. This function should not be run standalone.
+        :return: None.
+        """
         try:
             self.conn = psycopg2.connect(**self.essentials)
             self.cursor = self.conn.cursor()
@@ -26,8 +38,13 @@ class Postgres:
             print(e, type(e))
 
     def commit(self, query):
+        """
+        Starts a connection to the database, commits given query, and closes connection.
+        :param query: SQL query.
+        :return: None.
+        """
         try:
-            self.connect()
+            self.__connect()
             self.cursor.execute(query)
             self.conn.commit()
         except Exception as e:
@@ -36,9 +53,15 @@ class Postgres:
             self.conn.close()
 
     def fetch(self, query):
+        """
+        Creates connection, fetches given query, closes connection and returns collected data.
+        This function does not commit any query, and should therefore not be used for anything besides fetching data.
+        :param query: SQL query.
+        :return: Data from given fetch query.
+        """
         data = None
         try:
-            self.connect()
+            self.__connect()
             data = self.cursor.execute(query)
         except Exception as e:
             print(e, type(e))
@@ -47,11 +70,23 @@ class Postgres:
             return data
 
     def create_table(self, table, **kwargs):
+        """
+        Creates and commits a query to create a table.
+        :param table: Name of table.
+        :param kwargs: Name of data in tables = datatype. | Example name='text', age='int'.
+        :return: None.
+        """
         self.commit("CREATE TABLE %s ("
                     % table + ", ".join(list(str(key) + ' ' + str(value) for key, value in kwargs.items())) + ")"
                     )
 
     def insert(self, table, **kwargs):
+        """
+        Creates and commits a query for insertion to a given table.
+        :param table: Name of table.
+        :param kwargs: Name of column = value to insert. | Example: firstname='foo', lastname='bar'.
+        :return: None.
+        """
         joinkeys = lambda **dictionary: ", ".join(str(key) for key in dictionary.keys())
         joinvalues = lambda **dictionary: ", ".join('"' + str(key) + '"' for key in dictionary.values())
         self.commit("INSERT INTO %s (%s) VALUES (%s)" % (table, joinkeys(**kwargs), joinvalues(**kwargs)))
@@ -60,6 +95,11 @@ class Postgres:
         pass
 
     def fetchall(self, table):
+        """
+        Creates a fetch query and returns data.
+        :param table: Name of table.
+        :return: All data from given table.
+        """
         return self.fetch("SELECT * FROM %s" % table)
 
     def update(self):
@@ -72,8 +112,13 @@ class Postgres:
         pass
 
     def dataframe(self, table):
+        """
+        Creates and returns a pandas dataframe of a table.
+        :param table: Name of table.
+        :return: Dataframe of entire table.
+        """
         return pd.DataFrame(data=self.fetchall(table))
 
 
-sql_session = Postgres(**config)
-print(sql_session.essentials)
+# Creating a session using config dictionary.
+postgres_session = Postgresql(**config)
