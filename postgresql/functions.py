@@ -1,28 +1,25 @@
 import pandas as pd
 import psycopg2
 
-config = {
-    'database': '',  # Insert name of database.
-    'user': '',  # Insert db username.
-    'password': '',  # Insert db password.
-    'host': '',  # Insert db host (ip).
-    'port': ''  # Insert port for db (default 5432 for postgresql).
-}
-
 
 class Postgresql:
 
-    def __init__(self, database=None, user=None, password=None, host=None, port=None):
+    def __init__(self, use_config=True, database=None, user=None, password=None, host=None, port=None):
         """
-        Creates class variables.
+        Creates class variables. If you fill config.py, you will not need to give any parameters.
+        :param use_config: Bool of whether or not to use config file.
         :param database: Name of database.
         :param user: Username for database.
         :param password: Password for database.
         :param host: Hostname (domain or ip).
         :param port: Connection port.
         """
-        self.essentials = locals()
-        self.essentials.pop('self')
+        if use_config:
+            from postgresql import config as config
+            self.essentials = config
+        else:
+            self.essentials = locals()
+            self.essentials.pop('self')
         self.conn = None
         self.cursor = None
 
@@ -76,7 +73,7 @@ class Postgresql:
         :param kwargs: Name of data in tables = datatype. | Example name='text', age='int'.
         :return: None.
         """
-        self.commit("CREATE TABLE %s ("
+        self.commit("CREATE TABLE IF NOT EXISTS %s ("
                     % table + ", ".join(list(str(key) + ' ' + str(value) for key, value in kwargs.items())) + ")"
                     )
 
@@ -88,7 +85,7 @@ class Postgresql:
         :return: None.
         """
         joinkeys = lambda **dictionary: ", ".join(str(key) for key in dictionary.keys())
-        joinvalues = lambda **dictionary: ", ".join('"' + str(key) + '"' for key in dictionary.values())
+        joinvalues = lambda **dictionary: ", ".join("'" + str(value) + "'" for value in dictionary.values())
         self.commit("INSERT INTO %s (%s) VALUES (%s)" % (table, joinkeys(**kwargs), joinvalues(**kwargs)))
 
     def fetchone(self, table, **kwargs):
@@ -120,5 +117,5 @@ class Postgresql:
         return pd.DataFrame(data=self.fetchall(table))
 
 
-# Creating a session using config dictionary.
-postgres_session = Postgresql(**config)
+# Creating a session using config dictionary:
+# postgres_session = Postgresql(**config)
