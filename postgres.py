@@ -22,7 +22,6 @@ class Postgres:
         try:
             self.conn = psycopg2.connect(**self.essentials)
             self.cursor = self.conn.cursor()
-            print(True)
         except Exception as e:
             print(e, type(e))
 
@@ -31,10 +30,8 @@ class Postgres:
             self.connect()
             self.cursor.execute(query)
             self.conn.commit()
-
         except Exception as e:
             print(e, type(e))
-
         finally:
             self.conn.close()
 
@@ -43,10 +40,8 @@ class Postgres:
         try:
             self.connect()
             data = self.cursor.execute(query)
-
         except Exception as e:
             print(e, type(e))
-
         finally:
             self.conn.close()
             return data
