@@ -1,6 +1,6 @@
 # # If you want to use this config file, you do not have to put parameters while initializing the Postgresql class.
 
-config = {
+login = {
     'database': '',     # Insert name of database.
     'user':     '',     # Insert db username.
     'password': '',     # Insert db password.
