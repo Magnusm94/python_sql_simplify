@@ -1,6 +1,33 @@
 import psycopg2
-# import pandas as pd (currently not working.)
+import pandas as pd
 import json
+from functools import wraps
+from .config import login
+
+
+
+# Wrapper function to test if connection to database is active or not.
+# If it it not, then it attempts to create a connection, then closes the connection after.
+# If the connection is active, it will not close the connection after execution.
+def wrapper(func):
+
+    @wraps(func)
+    def connection_check(self, *args, **kwargs):
+        data = None
+        conn = bool(self.conn)
+        if not conn:
+            self.connect()
+        try:
+            data = func(self, *args, **kwargs)
+        except Exception as e:
+            print(e, type(e))
+        finally:
+            if not conn:
+                self.close_conn()
+            if data:
+                return data
+    if connection_check:
+        return connection_check
 
 
 class Postgresql:
@@ -11,98 +38,101 @@ class Postgresql:
         self.conn = None
         self.cursor = None
 
+# Executes given query.
+    @wrapper
     def __call__(self, query):
         try:
             self.cursor.execute(query)
             self.conn.commit()
             print('successful query:', query)
+
+        # Todo: Test if this part can be taken away.
         except psycopg2.errors.InFailedSqlTransaction:
-            self.conn.close()
-            self.conn = psycopg2.connect(**self.essentials)
-            self.cursor = self.conn.cursor()
+            self.close_conn()
+            self.connect()
         except Exception as e:
             print(e)
 
-    def __try(self, function, data=None, *args, **kwargs):
-        try:
-            data = function(*args, **kwargs)
-        except Exception as e:
-            print(e, type(e))
-        finally:
-            return data
-
+    # Activates "with" keyword. This will keep the connection open.
     def __enter__(self):
-        self.conn = psycopg2.connect(**self.essentials)
-        self.cursor = self.conn.cursor()
+        self.connect()
         return self
 
+    # Exits out of with statement.
     def __exit__(self, exc_type, exc_val, exc_tb):
-        try:
-            if exc_type:
-                print('exc_type:', exc_type)
-                print('exc_traceback:', exc_tb)
-                print('exc_value:', exc_val)
-                self.conn.close()
-                self.__enter__()
-        except:
-            print('hello')
+        if exc_type:
+            print('exc_type:', exc_type)
+            print('exc_traceback:', exc_tb)
+            print('exc_value:', exc_val)
             self.conn.close()
-            return True
+            self.connect()
+            return
+        self.close_conn()
+        return True
 
-    def commit(self, query):
-        self.__try(self.__execute, query=query)
-        self.conn.commit()
-        self.conn.close()
+    # Attempts to connect to database. Can give other credentials than listed.
+    def connect(self, **kwargs):
+        if not kwargs:
+            kwargs = self.essentials
+        try:
+            self.conn = psycopg2.connect(**kwargs)
+            self.cursor = self.conn.cursor()
+            print('Connected to database')
+        except Exception as e:
+            print(e, type(e))
+            self.close_conn()
 
+    # Closes connection.
+    def close_conn(self):
+        try:
+            self.conn.close()
+            self.conn = None
+            print('Connection closed')
+        except Exception as e:
+            print(e, type(e))
+
+    # Creates and executes query to create table.
     def create_table(self, table, **kwargs):
         insertion = f"{', '.join([f'{key} {value}' for key, value in kwargs.items()])}"
-        return f"CREATE TABLE IF NOT EXISTS {table} ({insertion})"
+        self(f"CREATE TABLE IF NOT EXISTS {table} ({insertion})")
 
+    # Creates and executes query to insert into table.
     def insert(self, table, **kwargs):
         join_keys = ", ".join(str(key) for key in kwargs.keys())
         join_values = ", ".join(f"'{value}'" for value in kwargs.values())
-        return f"INSERT INTO {table} ({join_keys}) VALUES ({join_values})"
+        self(f"INSERT INTO {table} ({join_keys}) VALUES ({join_values})")
 
+    # This may not be the functional version. Will check this later.
+    # Creates and executes query for inserting json (dictionary) object.
     def insert_json(self, table, column, **kwargs):
-        return f"INSERT INTO {table} ({column}) VALUES ('{json.dumps(kwargs)}')"
+        self(f"INSERT INTO {table} ({column}) VALUES ('{json.dumps(kwargs)}')")
 
-    def fetchone(self, table, **kwargs):
-        pass
+    # Fetches data from given query.
+    # Returns fetched data.
+    @wrapper
+    def _fetch(self, query):
+        self.cursor.execute(query)
+        data = self.cursor.fetchall()
+        return data
 
+    # Creates and executes query to fetch all elements from given table.
+    # Returns fetches data.
     def fetchall(self, table):
-        self.data = self.fetch(f"SELECT * FROM {table}")
+        return self._fetch(f'SELECT * FROM {table}')
 
-    def update(self):
-        pass
+    # Creates and executes query to fetch given elements from given table.
+    # *args: Items to select from table.
+    # **kwargs: Object identifier and value.
+    # Returns: Fetched data as list.
+    def fetch(self, table, *args, **kwargs):
+        if args:
+            args = f'({", ".join(args)})'
+        else:
+            args = '*'
+        data = []
+        base = f'SELECT {args} FROM {table} WHERE'
+        print(base)
+        for item, value in kwargs.items():
+            data.append(self._fetch(f'{base} {item} = {value}'))
+        return data
 
-    def delete(self):
-        pass
-
-    def create_db(self):
-        pass
-
-    def dataframe(self, table):
-        self.fetchall(table)
-        df = pd.DataFrame(data=self.data)
-        return df
-
-
-
-# # # # Enter your personal on information here
-login = {
-    'database': '',
-    'user':     '',
-    'password': '',
-    'host':     '',
-    'port':     ''
-}
-
-
-# Example of how to initialize the class.
-# pg = Postgresql(**login)
-
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# Some of the functions are not working yet. Feel free to help out with better solutions! :)#
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
